@@ -4,8 +4,20 @@
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+The initial UML uses 8 classes organized into two layers: a domain layer and a scheduling layer.
+
+The domain layer has three core classes. `Owner` stores the owner's name, daily time budget (in minutes), and preferences, and is responsible for holding the task list. `Pet` holds basic info (name, species, breed, age) and is associated with one owner. `Task` is the atomic unit of care — it has a title, duration, priority, category, and an optional recurrence flag. Two enumerations (`Priority`: LOW/MEDIUM/HIGH and `TaskCategory`: WALK, FEEDING, MEDICATION, GROOMING, ENRICHMENT, OTHER) back the `Task` so there are no magic strings.
+
+The scheduling layer has three classes. `Scheduler` takes an owner, a pet, and their task list and exposes a `generate_plan()` method; private helpers handle sorting by priority, filtering tasks that fit the remaining time budget, and resolving time conflicts. It produces a `DailyPlan` (modeled as a dependency, not ownership, to keep concerns separate). `DailyPlan` holds an ordered list of `ScheduledEntry` objects and knows the total duration; it can render a summary table. `ScheduledEntry` pairs a `Task` with a concrete start/end time and a human-readable `reason` string that explains why the task was placed at that slot — satisfying the "explain the plan" requirement from the scenario.
+``````````````````````````````````````````
+3 Core actions a user should be able to perform:
+
+1.User should be able to provide pet related inputs. (e.g. name, breed, age, ongoing medications if any etc.)
+
+2. User should be able to provide personal time availability.
+
+3. User should be able to see the today's task, and update/modify if needed.
+
 
 **b. Design changes**
 

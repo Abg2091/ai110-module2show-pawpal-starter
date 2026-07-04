@@ -1,15 +1,96 @@
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
-    %% Keep this file updated so it matches your final implementation.
+    %% ── Enumerations ──────────────────────────────────────────────────────────
 
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class TaskCategory {
+        <<enumeration>>
+        WALK
+        FEEDING
+        MEDICATION
+        GROOMING
+        ENRICHMENT
+        OTHER
     }
 
-    ClassName --> AnotherClass : relationship
+    %% ── Core domain classes ───────────────────────────────────────────────────
+
+    class Owner {
+        +str name
+        +int available_minutes
+        +str preferences
+        +add_task(task: Task) None
+        +remove_task(task: Task) None
+        +get_tasks() list
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +str breed
+        +int age_years
+    }
+
+    class Task {
+        +str title
+        +int duration_minutes
+        +Priority priority
+        +TaskCategory category
+        +bool is_recurring
+        +str frequency
+        +is_high_priority() bool
+        +to_dict() dict
+    }
+
+    %% ── Scheduling classes ────────────────────────────────────────────────────
+
+    class Scheduler {
+        +Owner owner
+        +Pet pet
+        +list~Task~ tasks
+        +str start_time
+        +generate_plan() DailyPlan
+        -_sort_by_priority(tasks: list) list
+        -_filter_by_time(tasks: list, budget: int) list
+        -_resolve_conflicts(entries: list) list
+        -_explain(task: Task, slot: str) str
+    }
+
+    class DailyPlan {
+        +Pet pet
+        +str date
+        +list~ScheduledEntry~ entries
+        +int total_duration_minutes
+        +add_entry(entry: ScheduledEntry) None
+        +get_summary() str
+        +to_table() list
+    }
+
+    class ScheduledEntry {
+        +Task task
+        +str start_time
+        +str end_time
+        +str reason
+        +duration_minutes() int
+    }
+
+    %% ── Relationships ─────────────────────────────────────────────────────────
+
+    Owner "1" --> "1" Pet           : owns
+    Owner "1" --> "0..*" Task       : manages
+
+    Task --> Priority               : has
+    Task --> TaskCategory           : categorized as
+
+    Scheduler --> Owner             : uses
+    Scheduler --> Pet               : uses
+    Scheduler --> "0..*" Task       : schedules
+    Scheduler ..> DailyPlan        : creates
+
+    DailyPlan "1" --> "0..*" ScheduledEntry : contains
+    ScheduledEntry --> Task         : references
