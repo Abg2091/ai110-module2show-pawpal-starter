@@ -23,9 +23,128 @@ The scheduling layer has three classes. `Scheduler` takes an owner, a pet, and t
 **b. Design changes**
 
 - Did your design change during implementation?
+
 Yes
+
 - If yes, describe at least one change and why you made it.
-Changes
+Changes Made:
+
+1. Give Scheduler/DailyPlan an actual date — this is a guaranteed crash today
+The problem: DailyPlan requires a date to exist (it's a mandatory field, no default), but nothing anywhere in Scheduler ever captures what that date is. The moment generate_plan() tries to build a DailyPlan, it will hit a dead end — either the program throws an error because no date was provided, or someone patches around it by quietly grabbing "today's date" from the computer's clock.
+
+Why that patch is worse than the crash: if the code silently fills in "today" on its own, then every time you re-run a test, or generate a plan for a different day than today, you get a different, unpredictable result. That makes bugs almost impossible to reproduce — "it worked yesterday" becomes a real, recurring complaint.
+
+UML change (diagrams/uml.mmd):
+
+
+class Scheduler {
+    +Owner owner
+    +Pet pet
+    +list~Task~ tasks
+    +str start_time
+    +str plan_date        %% NEW
+    ...
+}
+Code change (pawpal_system.py):
+
+
+class Scheduler:
+    def __init__(self, owner: Owner, pet: Pet, tasks: list[Task], start_time: str, plan_date: str):
+        ...
+        self.plan_date = plan_date
+So generate_plan() has a real value to hand to DailyPlan(date=self.plan_date, ...) instead of guessing.
+
+Plain-language why: think of DailyPlan as a form that legally requires today's date written on it. Right now, nobody ever hands the date to the person filling out the form — they either can't finish it, or they just scribble in whatever date happens to be on their watch. Making the date something you hand in on purpose means the form is always filled out correctly and the same way, every time.
+
+2. Make Priority actually orderable — sorting will crash otherwise
+The problem: Priority is defined as a plain label (LOW, MEDIUM, HIGH) with no built-in sense of "bigger" or "smaller." The scheduler's whole job is to sort tasks by priority — but Python has no way to know that HIGH outranks MEDIUM unless we tell it. Trying to sort by priority as-is will raise an error the first time it's attempted.
+
+UML change: no visual change needed — the diagram already shows Priority as an enumeration; just add a one-line note documenting the intended rank order so future readers (and graders) know it's meaningful:
+
+
+class Priority {
+    <<enumeration>>
+    LOW
+    MEDIUM
+    HIGH
+}
+note for Priority "Ordered LOW < MEDIUM < HIGH — used for sorting"
+Code change:
+
+
+from enum import IntEnum
+
+class Priority(IntEnum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+Everything else about Priority stays the same — you still write Priority.HIGH — but now Priority.HIGH > Priority.LOW is True instead of an error, and _sort_by_priority just works.
+
+Plain-language why: imagine three folders labeled Low, Medium, and High, but nobody told the filing clerk which one to deal with first. "Sort these by importance" is an instruction the clerk can't follow without knowing the ranking. Numbering them 1, 2, 3 behind the scenes gives the clerk (the computer) a rule to follow, while everyone still reads and writes the friendly names.
+
+3. Connect Owner to their Pet — the diagram promises this relationship but the code never delivers it
+The problem: the UML explicitly says "an Owner owns one Pet," but the Owner class has no pet field at all. As a workaround, Scheduler is handed owner and pet as two completely separate, unconnected pieces of information — nothing stops someone from accidentally pairing the wrong owner with the wrong pet.
+
+UML change: the relationship is already drawn correctly (Owner "1" --> "1" Pet : owns) — the diagram isn't wrong, the code just doesn't implement what it promises. No diagram change needed; this is purely a code fix to bring it in line with the diagram.
+
+Code change:
+
+
+class Owner:
+    def __init__(self, name: str, available_minutes: int, preferences: str, pet: Pet):
+        self.name = name
+        self.available_minutes = available_minutes
+        self.preferences = preferences
+        self.pet = pet
+        self.tasks: list[Task] = []
+Then Scheduler can be simplified to pull the pet from the owner instead of asking for it separately:
+
+
+class Scheduler:
+    def __init__(self, owner: Owner, tasks: list[Task], start_time: str, plan_date: str):
+        self.owner = owner
+        self.pet = owner.pet   # derived, not separately supplied
+        ...
+Plain-language why: right now, filling out a "start a schedule" request means separately telling the system "here's the owner" and "here's the pet," as if they might not belong together — like ordering a leash and a dog from two different counters and hoping someone remembers to match them up. Storing the pet directly on the owner means you only ever say "here's the owner," and their pet comes along automatically, correctly, every time.
+
+4. Stop keeping two separate task lists — Owner and Scheduler currently disagree with each other
+The problem: Owner keeps its own list of tasks (add_task/remove_task/get_tasks), but Scheduler is also given its own independent task list when it's created. These two lists have no ongoing connection. If you add or remove a task on the Owner after the Scheduler was set up, the Scheduler never finds out — it keeps planning against the old, outdated list.
+
+Code change:
+
+
+class Scheduler:
+    def __init__(self, owner: Owner, start_time: str, plan_date: str):
+        self.owner = owner
+        self.pet = owner.pet
+        self.start_time = start_time
+        self.plan_date = plan_date
+        # no separate self.tasks — always read live from the owner:
+
+    def generate_plan(self) -> DailyPlan:
+        tasks = self.owner.get_tasks()
+        ...
+Plain-language why: picture two grocery lists for the same household — one stuck on the fridge, one carried in someone's pocket. If you cross an item off the fridge list, the pocket list still says to buy it. Having exactly one list that everyone reads from directly (the Owner's) means there's only ever one "truth" about what tasks exist, and the scheduler can never accidentally work from stale information.
+
+5. Give Task a stable identity, so "remove this task" removes the right one
+The problem: Task is a dataclass, which means Python considers two tasks "equal" if all their fields match — same title, same duration, same priority — even if they're meant to be two separate entries (e.g., the owner logged "Feed Mochi, 10 min" twice for two different times of day). When remove_task is implemented, a natural approach (self.tasks.remove(task)) will remove the first matching task it finds — which might not be the one the user actually meant to delete.
+
+Code change: give each Task a unique, invisible ID at creation time so removal is based on "this exact task," not "a task that looks like this one":
+
+
+import uuid
+
+@dataclass
+class Task:
+    title: str
+    duration_minutes: int
+    priority: Priority
+    category: TaskCategory
+    is_recurring: bool = False
+    frequency: str = ""
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+Plain-language why: imagine identical twins wearing name tags that just say "Sam." If someone says "send Sam home," you can't tell which twin they mean — you'd just grab whichever one you saw first. Giving each task its own invisible serial number is like giving each twin a different ID badge underneath the name tag: they can still both be called "Sam" to a person, but the system never confuses one for the other.
+
 ---
 
 ## 2. Scheduling Logic and Tradeoffs

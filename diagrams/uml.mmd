@@ -7,6 +7,7 @@ classDiagram
         MEDIUM
         HIGH
     }
+    note for Priority "Ordered LOW < MEDIUM < HIGH — used for sorting"
 
     class TaskCategory {
         <<enumeration>>
@@ -24,6 +25,7 @@ classDiagram
         +str name
         +int available_minutes
         +str preferences
+        +Pet pet
         +add_task(task: Task) None
         +remove_task(task: Task) None
         +get_tasks() list
@@ -43,6 +45,7 @@ classDiagram
         +TaskCategory category
         +bool is_recurring
         +str frequency
+        +str id
         +is_high_priority() bool
         +to_dict() dict
     }
@@ -52,8 +55,8 @@ classDiagram
     class Scheduler {
         +Owner owner
         +Pet pet
-        +list~Task~ tasks
         +str start_time
+        +str plan_date
         +generate_plan() DailyPlan
         -_sort_by_priority(tasks: list) list
         -_filter_by_time(tasks: list, budget: int) list
@@ -88,8 +91,6 @@ classDiagram
     Task --> TaskCategory           : categorized as
 
     Scheduler --> Owner             : uses
-    Scheduler --> Pet               : uses
-    Scheduler --> "0..*" Task       : schedules
     Scheduler ..> DailyPlan        : creates
 
     DailyPlan "1" --> "0..*" ScheduledEntry : contains

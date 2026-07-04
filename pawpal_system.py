@@ -6,17 +6,20 @@ signatures are in place; behavior is implemented in a later step.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, IntEnum
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────
 
 
-class Priority(Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+class Priority(IntEnum):
+    """Ordered LOW < MEDIUM < HIGH — used for sorting."""
+
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
 
 
 class TaskCategory(Enum):
@@ -32,10 +35,11 @@ class TaskCategory(Enum):
 
 
 class Owner:
-    def __init__(self, name: str, available_minutes: int, preferences: str):
+    def __init__(self, name: str, available_minutes: int, preferences: str, pet: Pet):
         self.name = name
         self.available_minutes = available_minutes
         self.preferences = preferences
+        self.pet = pet
         self.tasks: list[Task] = []
 
     def add_task(self, task: Task) -> None:
@@ -64,6 +68,7 @@ class Task:
     category: TaskCategory
     is_recurring: bool = False
     frequency: str = ""
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def is_high_priority(self) -> bool:
         pass
@@ -76,11 +81,11 @@ class Task:
 
 
 class Scheduler:
-    def __init__(self, owner: Owner, pet: Pet, tasks: list[Task], start_time: str):
+    def __init__(self, owner: Owner, start_time: str, plan_date: str):
         self.owner = owner
-        self.pet = pet
-        self.tasks = tasks
+        self.pet = owner.pet
         self.start_time = start_time
+        self.plan_date = plan_date
 
     def generate_plan(self) -> DailyPlan:
         pass
