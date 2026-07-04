@@ -36,6 +36,8 @@ classDiagram
         +str species
         +str breed
         +int age_years
+        +list~Task~ tasks
+        +add_task(task: Task) None
     }
 
     class Task {
@@ -45,8 +47,10 @@ classDiagram
         +TaskCategory category
         +bool is_recurring
         +str frequency
+        +bool completed
         +str id
         +is_high_priority() bool
+        +mark_complete() None
         +to_dict() dict
     }
 
@@ -86,6 +90,7 @@ classDiagram
 
     Owner "1" --> "1" Pet           : owns
     Owner "1" --> "0..*" Task       : manages
+    Pet "1" --> "0..*" Task         : tracks
 
     Task --> Priority               : has
     Task --> TaskCategory           : categorized as

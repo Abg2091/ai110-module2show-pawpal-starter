@@ -44,14 +44,17 @@ _TIME_FORMAT = "%H:%M"
 
 
 def _parse_time(value: str) -> datetime:
+    """Parse an "HH:MM" string into a datetime."""
     return datetime.strptime(value, _TIME_FORMAT)
 
 
 def _format_time(moment: datetime) -> str:
+    """Format a datetime back into an "HH:MM" string."""
     return moment.strftime(_TIME_FORMAT)
 
 
 def _add_minutes(value: str, minutes: int) -> str:
+    """Return the "HH:MM" time that is `minutes` after `value`."""
     return _format_time(_parse_time(value) + timedelta(minutes=minutes))
 
 
@@ -60,6 +63,7 @@ def _add_minutes(value: str, minutes: int) -> str:
 
 class Owner:
     def __init__(self, name: str, available_minutes: int, preferences: str, pet: Pet):
+        """Create an owner with their available time, preferences, and pet."""
         self.name = name
         self.available_minutes = available_minutes
         self.preferences = preferences
@@ -67,12 +71,15 @@ class Owner:
         self.tasks: list[Task] = []
 
     def add_task(self, task: Task) -> None:
+        """Add a task to the owner's task list."""
         self.tasks.append(task)
 
     def remove_task(self, task: Task) -> None:
+        """Remove the task matching the given task's id."""
         self.tasks = [t for t in self.tasks if t.id != task.id]
 
     def get_tasks(self) -> list[Task]:
+        """Return a copy of the owner's current task list."""
         return list(self.tasks)
 
 
@@ -82,6 +89,11 @@ class Pet:
     species: str
     breed: str
     age_years: int
+    tasks: list[Task] = field(default_factory=list)
+
+    def add_task(self, task: Task) -> None:
+        """Add a task to the pet's own task list."""
+        self.tasks.append(task)
 
 
 @dataclass
@@ -92,12 +104,19 @@ class Task:
     category: TaskCategory
     is_recurring: bool = False
     frequency: str = ""
+    completed: bool = False
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def is_high_priority(self) -> bool:
+        """Return True if the task's priority is HIGH."""
         return self.priority == Priority.HIGH
 
+    def mark_complete(self) -> None:
+        """Mark the task as completed."""
+        self.completed = True
+
     def to_dict(self) -> dict:
+        """Return a plain-dict representation of the task."""
         return {
             "id": self.id,
             "title": self.title,
@@ -106,6 +125,7 @@ class Task:
             "category": self.category.value,
             "is_recurring": self.is_recurring,
             "frequency": self.frequency,
+            "completed": self.completed,
         }
 
 
@@ -114,12 +134,14 @@ class Task:
 
 class Scheduler:
     def __init__(self, owner: Owner, start_time: str, plan_date: str):
+        """Create a scheduler for an owner's pet, start time, and plan date."""
         self.owner = owner
         self.pet = owner.pet
         self.start_time = start_time
         self.plan_date = plan_date
 
     def generate_plan(self) -> DailyPlan:
+        """Build a DailyPlan by sorting, filtering, and slotting the owner's tasks."""
         tasks = self._sort_by_priority(self.owner.get_tasks())
         tasks = self._filter_by_time(tasks, self.owner.available_minutes)
 
@@ -145,9 +167,11 @@ class Scheduler:
         return plan
 
     def _sort_by_priority(self, tasks: list) -> list:
+        """Return tasks sorted from highest to lowest priority."""
         return sorted(tasks, key=lambda t: t.priority, reverse=True)
 
     def _filter_by_time(self, tasks: list, budget: int) -> list:
+        """Return tasks that fit within the remaining time budget."""
         fitted = []
         remaining = budget
         for task in tasks:
@@ -157,6 +181,7 @@ class Scheduler:
         return fitted
 
     def _resolve_conflicts(self, entries: list) -> list:
+        """Shift overlapping entries so none start before the previous one ends."""
         if not entries:
             return entries
         resolved = sorted(entries, key=lambda e: _parse_time(e.start_time))
@@ -168,6 +193,7 @@ class Scheduler:
         return resolved
 
     def _explain(self, task: Task, slot: str) -> str:
+        """Return a human-readable reason the task was scheduled at the given slot."""
         return (
             f"scheduled at {slot} because it is {task.priority.name.lower()} priority "
             f"({task.category.value}) and fits within the remaining time budget"
@@ -182,10 +208,12 @@ class DailyPlan:
     total_duration_minutes: int = 0
 
     def add_entry(self, entry: ScheduledEntry) -> None:
+        """Append an entry to the plan and update the total duration."""
         self.entries.append(entry)
         self.total_duration_minutes += entry.duration_minutes()
 
     def get_summary(self) -> str:
+        """Return a formatted, human-readable summary of the plan."""
         lines = [f"Daily plan for {self.pet.name} ({self.pet.breed}) - {self.date}"]
         if not self.entries:
             lines.append("  No tasks fit the available time today.")
@@ -199,6 +227,7 @@ class DailyPlan:
         return "\n".join(lines)
 
     def to_table(self) -> list:
+        """Return the plan's entries as a list of plain dicts."""
         return [
             {
                 "start": entry.start_time,
@@ -221,6 +250,7 @@ class ScheduledEntry:
     reason: str
 
     def duration_minutes(self) -> int:
+        """Return the entry's duration in minutes."""
         delta = _parse_time(self.end_time) - _parse_time(self.start_time)
         return int(delta.total_seconds() // 60)
 
@@ -229,6 +259,7 @@ class ScheduledEntry:
 
 
 def _prompt_nonempty(label: str, default: str | None = None) -> str:
+    """Prompt until the user enters a non-empty value or accepts the default."""
     suffix = f" [{default}]" if default is not None else ""
     while True:
         value = input(f"{label}{suffix}: ").strip()
@@ -240,6 +271,7 @@ def _prompt_nonempty(label: str, default: str | None = None) -> str:
 
 
 def _prompt_int(label: str, default: int | None = None, minimum: int = 0) -> int:
+    """Prompt until the user enters a valid integer >= minimum."""
     suffix = f" [{default}]" if default is not None else ""
     while True:
         raw = input(f"{label}{suffix}: ").strip()
@@ -257,6 +289,7 @@ def _prompt_int(label: str, default: int | None = None, minimum: int = 0) -> int
 
 
 def _prompt_choice(label: str, options) -> object:
+    """Prompt the user to pick one option from a numbered list."""
     options = list(options)
     print(f"{label}:")
     for index, option in enumerate(options, start=1):
@@ -275,6 +308,7 @@ def _prompt_choice(label: str, options) -> object:
 
 
 def _prompt_yes_no(label: str, default: bool = False) -> bool:
+    """Prompt for a yes/no answer, defaulting if left blank."""
     hint = "Y/n" if default else "y/N"
     raw = input(f"{label} ({hint}): ").strip().lower()
     if not raw:
@@ -283,6 +317,7 @@ def _prompt_yes_no(label: str, default: bool = False) -> bool:
 
 
 def _setup_owner_and_pet() -> Owner:
+    """Interactively collect pet and owner details and return the new Owner."""
     print("\n== Set up your pet ==")
     pet = Pet(
         name=_prompt_nonempty("Pet name"),
@@ -301,6 +336,7 @@ def _setup_owner_and_pet() -> Owner:
 
 
 def _add_task(owner: Owner) -> None:
+    """Interactively collect task details and add it to the owner."""
     print("\n== Add a task ==")
     title = _prompt_nonempty("Task title")
     duration = _prompt_int("Duration (minutes)", minimum=1)
@@ -322,6 +358,7 @@ def _add_task(owner: Owner) -> None:
 
 
 def _list_tasks(owner: Owner) -> None:
+    """Print a numbered list of the owner's current tasks."""
     tasks = owner.get_tasks()
     print("\n== Tasks ==")
     if not tasks:
@@ -336,6 +373,7 @@ def _list_tasks(owner: Owner) -> None:
 
 
 def _remove_task(owner: Owner) -> None:
+    """Interactively remove a task chosen from the owner's task list."""
     tasks = owner.get_tasks()
     _list_tasks(owner)
     if not tasks:
@@ -350,6 +388,7 @@ def _remove_task(owner: Owner) -> None:
 
 
 def _generate_plan(owner: Owner) -> DailyPlan:
+    """Interactively generate and print today's plan for the owner."""
     print("\n== Generate today's plan ==")
     start_time = _prompt_nonempty("Plan start time (HH:MM)", default="08:00")
     plan_date = _prompt_nonempty("Plan date (YYYY-MM-DD)", default=date.today().isoformat())
@@ -361,6 +400,7 @@ def _generate_plan(owner: Owner) -> DailyPlan:
 
 
 def _run_demo() -> None:
+    """Run a non-interactive, seeded demo of the scheduling pipeline."""
     pet = Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
     owner = Owner(name="Jordan", available_minutes=60, preferences="mornings only", pet=pet)
     owner.add_task(Task("Morning walk", 30, Priority.HIGH, TaskCategory.WALK))
@@ -379,6 +419,7 @@ def _run_demo() -> None:
 
 
 def run_cli() -> None:
+    """Run the interactive PawPal+ menu loop."""
     owner = _setup_owner_and_pet()
     last_plan: DailyPlan | None = None
 
@@ -416,6 +457,7 @@ def run_cli() -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and dispatch to the demo or interactive menu."""
     parser = argparse.ArgumentParser(description="PawPal+ command-line interface")
     parser.add_argument(
         "--demo",
