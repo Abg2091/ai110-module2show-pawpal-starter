@@ -9,6 +9,7 @@ The initial UML uses 8 classes organized into two layers: a domain layer and a s
 The domain layer has three core classes. `Owner` stores the owner's name, daily time budget (in minutes), and preferences, and is responsible for holding the task list. `Pet` holds basic info (name, species, breed, age) and is associated with one owner. `Task` is the atomic unit of care — it has a title, duration, priority, category, and an optional recurrence flag. Two enumerations (`Priority`: LOW/MEDIUM/HIGH and `TaskCategory`: WALK, FEEDING, MEDICATION, GROOMING, ENRICHMENT, OTHER) back the `Task` so there are no magic strings.
 
 The scheduling layer has three classes. `Scheduler` takes an owner, a pet, and their task list and exposes a `generate_plan()` method; private helpers handle sorting by priority, filtering tasks that fit the remaining time budget, and resolving time conflicts. It produces a `DailyPlan` (modeled as a dependency, not ownership, to keep concerns separate). `DailyPlan` holds an ordered list of `ScheduledEntry` objects and knows the total duration; it can render a summary table. `ScheduledEntry` pairs a `Task` with a concrete start/end time and a human-readable `reason` string that explains why the task was placed at that slot — satisfying the "explain the plan" requirement from the scenario.
+
 ``````````````````````````````````````````
 3 Core actions a user should be able to perform:
 
@@ -22,8 +23,9 @@ The scheduling layer has three classes. `Scheduler` takes an owner, a pet, and t
 **b. Design changes**
 
 - Did your design change during implementation?
+Yes
 - If yes, describe at least one change and why you made it.
-
+Changes
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
