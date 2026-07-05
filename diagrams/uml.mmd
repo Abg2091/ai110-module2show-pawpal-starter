@@ -53,8 +53,10 @@ classDiagram
         +str id
         +is_high_priority() bool
         +mark_complete() None
+        +next_occurrence(reference_date: str) Task
         +to_dict() dict
     }
+    note for Task "last_scheduled_date holds the "YYYY-MM-DD" date this\noccurrence is due for; next_occurrence() computes the following\none via timedelta based on frequency (daily = +1 day, weekly = +7)"
 
     %% ── Scheduling classes ────────────────────────────────────────────────────
 

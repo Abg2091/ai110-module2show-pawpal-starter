@@ -155,31 +155,62 @@ def test_generate_plan_reads_tasks_live_from_owner(owner):
     assert len(scheduler.generate_plan().entries) == 1
 
 
-def test_generate_plan_renews_recurring_task_completion_on_a_new_day(owner):
-    meds = Task("Meds", 5, Priority.HIGH, TaskCategory.MEDICATION, is_recurring=True)
+def test_next_occurrence_daily_adds_one_day():
+    task = Task("Meds", 5, Priority.HIGH, TaskCategory.MEDICATION, is_recurring=True, frequency="daily")
+
+    next_task = task.next_occurrence("2026-07-04")
+
+    assert next_task.last_scheduled_date == "2026-07-05"
+    assert next_task.completed is False
+    assert next_task.id != task.id
+
+
+def test_next_occurrence_weekly_adds_seven_days():
+    task = Task("Vacuum", 20, Priority.LOW, TaskCategory.OTHER, is_recurring=True, frequency="weekly")
+
+    next_task = task.next_occurrence("2026-07-04")
+
+    assert next_task.last_scheduled_date == "2026-07-11"
+
+
+def test_next_occurrence_returns_none_for_non_recurring():
+    task = Task("Walk", 20, Priority.HIGH, TaskCategory.WALK)
+    assert task.next_occurrence("2026-07-04") is None
+
+
+def test_next_occurrence_returns_none_for_unrecognized_frequency():
+    task = Task("Walk", 20, Priority.HIGH, TaskCategory.WALK, is_recurring=True, frequency="fortnightly")
+    assert task.next_occurrence("2026-07-04") is None
+
+
+def test_generate_plan_spawns_next_occurrence_for_completed_daily_task(owner):
+    meds = Task("Meds", 5, Priority.HIGH, TaskCategory.MEDICATION, is_recurring=True, frequency="daily")
     owner.add_task(meds)
-
     Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04").generate_plan()
+
     meds.mark_complete()
-    assert meds.completed is True
-
     Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04").generate_plan()
-    assert meds.completed is True  # same-day regeneration leaves it alone
 
-    Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-05").generate_plan()
-    assert meds.completed is False  # new day renews it
+    remaining = owner.get_tasks()
+    assert meds not in remaining
+    assert len(remaining) == 1
+    next_meds = remaining[0]
+    assert next_meds.title == "Meds"
+    assert next_meds.completed is False
+    assert next_meds.last_scheduled_date == "2026-07-05"
 
 
-def test_generate_plan_does_not_reset_recurring_completion_within_the_same_day(owner):
-    walk = Task("Walk", 10, Priority.HIGH, TaskCategory.WALK, is_recurring=True)
+def test_generate_plan_does_not_spawn_a_second_occurrence_once_renewed(owner):
+    walk = Task("Walk", 10, Priority.HIGH, TaskCategory.WALK, is_recurring=True, frequency="daily")
     owner.add_task(walk)
     scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
 
     scheduler.generate_plan()
     walk.mark_complete()
     scheduler.generate_plan()
+    scheduler.generate_plan()
 
-    assert walk.completed is True
+    assert len(owner.get_tasks()) == 1
 
 
 def test_generate_plan_removes_completed_one_off_tasks(owner):

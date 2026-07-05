@@ -64,6 +64,26 @@ def _add_minutes(value: str, minutes: int) -> str:
     return _format_time(_parse_time(value) + timedelta(minutes=minutes))
 
 
+# New: date-string helpers, added so recurring tasks can compute a future due
+# date (e.g. "daily" = +1 day) the same way the time helpers above already do.
+_DATE_FORMAT = "%Y-%m-%d"
+
+
+def _parse_date(value: str) -> date:
+    """Parse a "YYYY-MM-DD" string into a date."""
+    return datetime.strptime(value, _DATE_FORMAT).date()
+
+
+def _add_days(value: str, days: int) -> str:
+    """Return the "YYYY-MM-DD" date that is `days` after `value`."""
+    return (_parse_date(value) + timedelta(days=days)).isoformat()
+
+
+# New: frequency -> number of days until a completed recurring task's next
+# occurrence, used by Task.next_occurrence() to compute its due date.
+_RECURRENCE_INTERVAL_DAYS = {"daily": 1, "weekly": 7}
+
+
 # ── Core domain classes ───────────────────────────────────────────────────
 
 
@@ -111,6 +131,9 @@ class Task:
     is_recurring: bool = False
     frequency: str = ""
     completed: bool = False
+    # Repurposed: used to hold the plan_date a recurring task was last reset for;
+    # now holds the "YYYY-MM-DD" date this occurrence is due for, since renewal
+    # is driven by completion + next_occurrence() rather than a date comparison.
     last_scheduled_date: str | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -121,6 +144,26 @@ class Task:
     def mark_complete(self) -> None:
         """Mark the task as completed."""
         self.completed = True
+
+    def next_occurrence(self, reference_date: str) -> "Task | None":
+        """Return a new Task for the next occurrence, due `frequency` after `reference_date`.
+
+        New: replaces the old approach of resetting this same instance's
+        `completed` flag, so a finished occurrence stays as a historical record
+        instead of being silently reused for the next cycle.
+        """
+        interval = _RECURRENCE_INTERVAL_DAYS.get(self.frequency.lower())
+        if not self.is_recurring or interval is None:
+            return None
+        return Task(
+            title=self.title,
+            duration_minutes=self.duration_minutes,
+            priority=self.priority,
+            category=self.category,
+            is_recurring=True,
+            frequency=self.frequency,
+            last_scheduled_date=_add_days(reference_date, interval),
+        )
 
     def to_dict(self) -> dict:
         """Return a plain-dict representation of the task."""
@@ -176,14 +219,20 @@ class Scheduler:
         return plan
 
     def _carry_forward_tasks(self) -> None:
-        """Renew recurring tasks for a new day and drop completed one-off tasks."""
+        """Spawn the next occurrence for completed recurring tasks; drop other completed tasks.
+
+        Changed from resetting `completed`/`last_scheduled_date` in place on a
+        new day to spawning a fresh Task per occurrence, since date-gated
+        in-place resets couldn't represent "the next due date" a caller needs.
+        """
         for task in self.owner.get_tasks():
+            if not task.completed:
+                continue
             if task.is_recurring:
-                if task.last_scheduled_date != self.plan_date:
-                    task.completed = False
-                    task.last_scheduled_date = self.plan_date
-            elif task.completed:
-                self.owner.remove_task(task)
+                next_task = task.next_occurrence(self.plan_date)
+                if next_task is not None:
+                    self.owner.add_task(next_task)
+            self.owner.remove_task(task)
 
     def _sort_by_priority(self, tasks: list) -> list:
         """Return tasks sorted from highest to lowest priority."""
