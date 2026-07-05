@@ -247,6 +247,32 @@ def test_resolve_conflicts_shifts_overlapping_entries_and_preserves_duration(own
     assert (resolved[1].start_time, resolved[1].end_time) == ("08:30", "08:50")
 
 
+def test_detect_conflicts_flags_overlapping_entries_across_pets():
+    mochi = Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
+    luna = Pet(name="Luna", species="cat", breed="Domestic Shorthair", age_years=2)
+    mochi_plan = DailyPlan(pet=mochi, date="2026-07-04")
+    mochi_plan.add_entry(ScheduledEntry(Task("Walk", 30, Priority.HIGH, TaskCategory.WALK), "07:30", "08:00", "r"))
+    luna_plan = DailyPlan(pet=luna, date="2026-07-04")
+    luna_plan.add_entry(ScheduledEntry(Task("Feed", 10, Priority.HIGH, TaskCategory.FEEDING), "07:30", "07:40", "r"))
+
+    conflicts = Scheduler.detect_conflicts([mochi_plan, luna_plan])
+
+    assert len(conflicts) == 1
+    assert "Mochi" in conflicts[0]
+    assert "Luna" in conflicts[0]
+
+
+def test_detect_conflicts_returns_empty_list_when_no_overlap():
+    mochi = Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
+    luna = Pet(name="Luna", species="cat", breed="Domestic Shorthair", age_years=2)
+    mochi_plan = DailyPlan(pet=mochi, date="2026-07-04")
+    mochi_plan.add_entry(ScheduledEntry(Task("Walk", 30, Priority.HIGH, TaskCategory.WALK), "07:30", "08:00", "r"))
+    luna_plan = DailyPlan(pet=luna, date="2026-07-04")
+    luna_plan.add_entry(ScheduledEntry(Task("Feed", 10, Priority.HIGH, TaskCategory.FEEDING), "09:00", "09:10", "r"))
+
+    assert Scheduler.detect_conflicts([mochi_plan, luna_plan]) == []
+
+
 # ── DailyPlan / ScheduledEntry ────────────────────────────────────────────
 
 

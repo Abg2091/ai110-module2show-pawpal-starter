@@ -268,6 +268,30 @@ class Scheduler:
             f"({task.category.value}) and fits within the remaining time budget"
         )
 
+    @staticmethod
+    def detect_conflicts(plans: list["DailyPlan"]) -> list[str]:
+        """Return warning strings for any entries that overlap in time, across one or more pets.
+
+        New: a lightweight pairwise time-overlap check that reports conflicts
+        as plain strings instead of raising, since plans built by separate
+        Scheduler runs (e.g. one per pet) can't be auto-resolved the way
+        `_resolve_conflicts` shifts entries within a single run.
+        """
+        warnings = []
+        dated_entries = [(plan.pet, entry) for plan in plans for entry in plan.entries]
+        for index, (pet_a, entry_a) in enumerate(dated_entries):
+            for pet_b, entry_b in dated_entries[index + 1 :]:
+                a_starts_first = _parse_time(entry_a.start_time) < _parse_time(entry_b.end_time)
+                b_starts_first = _parse_time(entry_b.start_time) < _parse_time(entry_a.end_time)
+                if a_starts_first and b_starts_first:
+                    warnings.append(
+                        f"Warning: '{entry_a.task.title}' for {pet_a.name} "
+                        f"({entry_a.start_time}-{entry_a.end_time}) overlaps with "
+                        f"'{entry_b.task.title}' for {pet_b.name} "
+                        f"({entry_b.start_time}-{entry_b.end_time})"
+                    )
+        return warnings
+
 
 @dataclass
 class DailyPlan:

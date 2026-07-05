@@ -68,7 +68,8 @@ def main() -> None:
     luna_tasks[0].mark_complete()  # vet checkup already happened
 
     mochi_plan = build_plan_for_pet(owner, mochi, mochi_tasks, start_time="07:30")
-    luna_plan = build_plan_for_pet(owner, luna, luna_tasks, start_time="09:00")
+    # Same start time as Mochi's plan on purpose, to demonstrate cross-pet conflict detection below.
+    luna_plan = build_plan_for_pet(owner, luna, luna_tasks, start_time="07:30")
 
     banner = "=" * 42
     print(banner)
@@ -85,6 +86,15 @@ def main() -> None:
         print("\n".join(plan.get_summary().splitlines()[1:]))
 
     print(banner)
+
+    print()
+    print("== Conflict detection ==")
+    conflicts = Scheduler.detect_conflicts([mochi_plan, luna_plan])
+    if conflicts:
+        for warning in conflicts:
+            print(f"  {warning}")
+    else:
+        print("  No conflicts found.")
 
     pets = [mochi, luna]
 
