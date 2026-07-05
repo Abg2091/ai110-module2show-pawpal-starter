@@ -18,6 +18,7 @@ classDiagram
         ENRICHMENT
         OTHER
     }
+    note for TaskCategory "MEDICATION and FEEDING are mandatory — the scheduler's\ntime filter never drops them, regardless of remaining budget"
 
     %% ── Core domain classes ───────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ classDiagram
         +bool is_recurring
         +str frequency
         +bool completed
+        +str last_scheduled_date
         +str id
         +is_high_priority() bool
         +mark_complete() None
@@ -62,6 +64,7 @@ classDiagram
         +str start_time
         +str plan_date
         +generate_plan() DailyPlan
+        -_carry_forward_tasks() None
         -_sort_by_priority(tasks: list) list
         -_filter_by_time(tasks: list, budget: int) list
         -_resolve_conflicts(entries: list) list

@@ -102,12 +102,32 @@ def test_sort_by_priority_orders_high_first_and_is_stable(owner):
 def test_filter_by_time_skips_tasks_that_do_not_fit_but_keeps_checking(owner):
     scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
     fits = Task("A", 30, Priority.HIGH, TaskCategory.WALK)
-    too_big = Task("B", 40, Priority.HIGH, TaskCategory.FEEDING)
+    too_big = Task("B", 40, Priority.HIGH, TaskCategory.GROOMING)
     also_fits = Task("C", 20, Priority.MEDIUM, TaskCategory.ENRICHMENT)
 
     fitted = scheduler._filter_by_time([fits, too_big, also_fits], budget=60)
 
     assert fitted == [fits, also_fits]
+
+
+def test_filter_by_time_never_drops_mandatory_categories(owner):
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    oversized_meds = Task("Meds", 40, Priority.LOW, TaskCategory.MEDICATION)
+    optional = Task("Play", 20, Priority.HIGH, TaskCategory.ENRICHMENT)
+
+    fitted = scheduler._filter_by_time([oversized_meds, optional], budget=30)
+
+    assert oversized_meds in fitted
+
+
+def test_filter_by_time_mandatory_overflow_blocks_later_optional_tasks(owner):
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    oversized_meds = Task("Meds", 40, Priority.HIGH, TaskCategory.MEDICATION)
+    optional = Task("Play", 10, Priority.HIGH, TaskCategory.ENRICHMENT)
+
+    fitted = scheduler._filter_by_time([oversized_meds, optional], budget=30)
+
+    assert fitted == [oversized_meds]
 
 
 def test_generate_plan_builds_sequential_schedule_and_drops_what_does_not_fit(owner):
@@ -133,6 +153,52 @@ def test_generate_plan_reads_tasks_live_from_owner(owner):
     owner.add_task(Task("Walk", 10, Priority.HIGH, TaskCategory.WALK))
 
     assert len(scheduler.generate_plan().entries) == 1
+
+
+def test_generate_plan_renews_recurring_task_completion_on_a_new_day(owner):
+    meds = Task("Meds", 5, Priority.HIGH, TaskCategory.MEDICATION, is_recurring=True)
+    owner.add_task(meds)
+
+    Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04").generate_plan()
+    meds.mark_complete()
+    assert meds.completed is True
+
+    Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04").generate_plan()
+    assert meds.completed is True  # same-day regeneration leaves it alone
+
+    Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-05").generate_plan()
+    assert meds.completed is False  # new day renews it
+
+
+def test_generate_plan_does_not_reset_recurring_completion_within_the_same_day(owner):
+    walk = Task("Walk", 10, Priority.HIGH, TaskCategory.WALK, is_recurring=True)
+    owner.add_task(walk)
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+
+    scheduler.generate_plan()
+    walk.mark_complete()
+    scheduler.generate_plan()
+
+    assert walk.completed is True
+
+
+def test_generate_plan_removes_completed_one_off_tasks(owner):
+    vet_visit = Task("Vet visit", 30, Priority.HIGH, TaskCategory.OTHER)
+    vet_visit.mark_complete()
+    owner.add_task(vet_visit)
+
+    Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04").generate_plan()
+
+    assert vet_visit not in owner.get_tasks()
+
+
+def test_generate_plan_keeps_pending_one_off_tasks(owner):
+    vet_visit = Task("Vet visit", 30, Priority.HIGH, TaskCategory.OTHER)
+    owner.add_task(vet_visit)
+
+    Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04").generate_plan()
+
+    assert vet_visit in owner.get_tasks()
 
 
 def test_resolve_conflicts_shifts_overlapping_entries_and_preserves_duration(owner):

@@ -38,6 +38,12 @@ class TaskCategory(Enum):
     OTHER = "other"
 
 
+# Categories that must never be dropped by the scheduler's time filter, no
+# matter how little budget remains — missing a pet's meds or feeding isn't
+# an acceptable tradeoff the way skipping a grooming session is.
+MANDATORY_CATEGORIES = frozenset({TaskCategory.MEDICATION, TaskCategory.FEEDING})
+
+
 # ── Time helpers ──────────────────────────────────────────────────────────
 
 _TIME_FORMAT = "%H:%M"
@@ -105,6 +111,7 @@ class Task:
     is_recurring: bool = False
     frequency: str = ""
     completed: bool = False
+    last_scheduled_date: str | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def is_high_priority(self) -> bool:
@@ -126,6 +133,7 @@ class Task:
             "is_recurring": self.is_recurring,
             "frequency": self.frequency,
             "completed": self.completed,
+            "last_scheduled_date": self.last_scheduled_date,
         }
 
 
@@ -142,6 +150,7 @@ class Scheduler:
 
     def generate_plan(self) -> DailyPlan:
         """Build a DailyPlan by sorting, filtering, and slotting the owner's tasks."""
+        self._carry_forward_tasks()
         tasks = self._sort_by_priority(self.owner.get_tasks())
         tasks = self._filter_by_time(tasks, self.owner.available_minutes)
 
@@ -166,16 +175,27 @@ class Scheduler:
             plan.add_entry(entry)
         return plan
 
+    def _carry_forward_tasks(self) -> None:
+        """Renew recurring tasks for a new day and drop completed one-off tasks."""
+        for task in self.owner.get_tasks():
+            if task.is_recurring:
+                if task.last_scheduled_date != self.plan_date:
+                    task.completed = False
+                    task.last_scheduled_date = self.plan_date
+            elif task.completed:
+                self.owner.remove_task(task)
+
     def _sort_by_priority(self, tasks: list) -> list:
         """Return tasks sorted from highest to lowest priority."""
         return sorted(tasks, key=lambda t: t.priority, reverse=True)
 
     def _filter_by_time(self, tasks: list, budget: int) -> list:
-        """Return tasks that fit within the remaining time budget."""
+        """Return tasks that fit the budget, always keeping mandatory categories."""
         fitted = []
         remaining = budget
         for task in tasks:
-            if task.duration_minutes <= remaining:
+            is_mandatory = task.category in MANDATORY_CATEGORIES
+            if is_mandatory or task.duration_minutes <= remaining:
                 fitted.append(task)
                 remaining -= task.duration_minutes
         return fitted
