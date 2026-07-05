@@ -152,12 +152,22 @@ Plain-language why: imagine identical twins wearing name tags that just say "Sam
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+
+My schedular considers time availability and task priorities. 
+
 - How did you decide which constraints mattered most?
+
+The type of the task was a deciding factor to make sure its priority and followed by users' time avialability. 
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+
+The "sort + early-break sweep-line" optimization improves efficiency on large datasets by sorting data to skip unnecessary checks, whereas a plain nested loop (O(n²)) is simpler to read but checks everything. While the sweep-line offers better performance for massive systems like multi-owner schedules, it adds complexity and cognitive load that is unnecessary for small tasks. In a small codebase, a plain loop is faster to write and runs in microseconds, making the optimized version "over-engineering" until real-world data proves a simpler approach is too slow.
+
 - Why is that tradeoff reasonable for this scenario?
+
+The tradeoff is reasonable because of apps simplicity in otherwords smaller data base.
 
 ---
 

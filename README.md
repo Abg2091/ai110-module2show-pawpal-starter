@@ -95,10 +95,32 @@ Sample test output:
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | sort by priority: _sort_by_priority(self, tasks:list) -> list:
+ """Return tasks sorted from highest to lowest priority."""
+
+| Filtering | filter by time: _filter_by_time(self, tasks: list, budget: int) -> list:
+"""Return tasks that fit the budget, always keeping mandatory categories."""
+
+|Conflict detection| detect_conflicts(plans: list["DailyPlan"]) -> list[str]:
+"""Return warning strings for any entries that overlap in time, across one or more pets.
+
+    Changed: pairs now come from itertools.combinations instead of manual
+    `enumerate` + `entries[index + 1:]` slicing, which allocated a new list
+    on every outer iteration -- wasted O(n) copying on top of the pairwise
+    comparisons. The overlap test and message formatting were also pulled
+    out into named helpers (_entries_overlap, _conflict_message) so the
+    loop body reads as "for each pair, warn if it overlaps" instead of a
+    block of inline, confusingly-named booleans."""
+
+| Conflict handling | _resolve_conflicts(self, entries: list) -> list:
+ """Shift overlapping entries so none start before the previous one ends."""
+ 
+| Recurring tasks | next_occurrence(self, reference_date: str) -> "Task | None":
+"""Return a new Task for the next occurrence, due `frequency` after `reference_date`.
+
+    New: replaces the old approach of resetting this same instance's
+    `completed` flag, so a finished occurrence stays as a historical record
+    instead of being silently reused for the next cycle."""
 
 ## 📸 Demo Walkthrough
 

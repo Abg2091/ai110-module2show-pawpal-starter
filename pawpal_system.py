@@ -12,6 +12,7 @@ Run directly to use the CLI:
 from __future__ import annotations
 
 import argparse
+import itertools
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -183,6 +184,24 @@ class Task:
 # ── Scheduling classes ────────────────────────────────────────────────────
 
 
+def _entries_overlap(entry_a: "ScheduledEntry", entry_b: "ScheduledEntry") -> bool:
+    """Return True if two scheduled entries share any time in common."""
+    return (
+        _parse_time(entry_a.start_time) < _parse_time(entry_b.end_time)
+        and _parse_time(entry_b.start_time) < _parse_time(entry_a.end_time)
+    )
+
+
+def _conflict_message(pet_a: "Pet", entry_a: "ScheduledEntry", pet_b: "Pet", entry_b: "ScheduledEntry") -> str:
+    """Format a human-readable warning for two overlapping scheduled entries."""
+    return (
+        f"Warning: '{entry_a.task.title}' for {pet_a.name} "
+        f"({entry_a.start_time}-{entry_a.end_time}) overlaps with "
+        f"'{entry_b.task.title}' for {pet_b.name} "
+        f"({entry_b.start_time}-{entry_b.end_time})"
+    )
+
+
 class Scheduler:
     def __init__(self, owner: Owner, start_time: str, plan_date: str):
         """Create a scheduler for an owner's pet, start time, and plan date."""
@@ -272,25 +291,20 @@ class Scheduler:
     def detect_conflicts(plans: list["DailyPlan"]) -> list[str]:
         """Return warning strings for any entries that overlap in time, across one or more pets.
 
-        New: a lightweight pairwise time-overlap check that reports conflicts
-        as plain strings instead of raising, since plans built by separate
-        Scheduler runs (e.g. one per pet) can't be auto-resolved the way
-        `_resolve_conflicts` shifts entries within a single run.
+        Changed: pairs now come from itertools.combinations instead of manual
+        `enumerate` + `entries[index + 1:]` slicing, which allocated a new list
+        on every outer iteration -- wasted O(n) copying on top of the pairwise
+        comparisons. The overlap test and message formatting were also pulled
+        out into named helpers (_entries_overlap, _conflict_message) so the
+        loop body reads as "for each pair, warn if it overlaps" instead of a
+        block of inline, confusingly-named booleans.
         """
-        warnings = []
-        dated_entries = [(plan.pet, entry) for plan in plans for entry in plan.entries]
-        for index, (pet_a, entry_a) in enumerate(dated_entries):
-            for pet_b, entry_b in dated_entries[index + 1 :]:
-                a_starts_first = _parse_time(entry_a.start_time) < _parse_time(entry_b.end_time)
-                b_starts_first = _parse_time(entry_b.start_time) < _parse_time(entry_a.end_time)
-                if a_starts_first and b_starts_first:
-                    warnings.append(
-                        f"Warning: '{entry_a.task.title}' for {pet_a.name} "
-                        f"({entry_a.start_time}-{entry_a.end_time}) overlaps with "
-                        f"'{entry_b.task.title}' for {pet_b.name} "
-                        f"({entry_b.start_time}-{entry_b.end_time})"
-                    )
-        return warnings
+        entries = [(plan.pet, entry) for plan in plans for entry in plan.entries]
+        return [
+            _conflict_message(pet_a, entry_a, pet_b, entry_b)
+            for (pet_a, entry_a), (pet_b, entry_b) in itertools.combinations(entries, 2)
+            if _entries_overlap(entry_a, entry_b)
+        ]
 
 
 @dataclass
