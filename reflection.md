@@ -143,6 +143,7 @@ class Task:
     is_recurring: bool = False
     frequency: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
 Plain-language why: imagine identical twins wearing name tags that just say "Sam." If someone says "send Sam home," you can't tell which twin they mean — you'd just grab whichever one you saw first. Giving each task its own invisible serial number is like giving each twin a different ID badge underneath the name tag: they can still both be called "Sam" to a person, but the system never confuses one for the other.
 
 ---
@@ -176,12 +177,22 @@ The tradeoff is reasonable because of apps simplicity in otherwords smaller data
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+
+I used the Claude/Claude Code during this project in order to determine the backend and basic architecture of the Pawpal+ app, later dived into bulding the logic and algorithamic layer (brain of the app). Following into integrating display logic i.e streamlit file to brain of the app. In the end fixing few bugs found along the way and refactoring the code for clarity & better readability.
+
 - What kinds of prompts or questions were most helpful?
+
+I believe, the prompts/questions that asks, explaining the desicion taken and thinking behind it were most helpful in understanding the implementation and intensions.
 
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
+
+In implemnting final UML.mmd, the Claude gave me an updated code without verifying for any potential errors. In that moment, I used a online Mermaid file viewer to verify the code's relibility and found an error which I fed back to claude to fix. Claude Code, fixed it by switching the inner quotes to single quotes: 'YYYY-MM-DD'.
+
 - How did you evaluate or verify what the AI suggested?
+
+I always asked in the prompt to verify and explain the each step it was implementing.
 
 ---
 
@@ -246,7 +257,17 @@ My confidence level is 8 out of 10.
 
 - What edge cases would you test next if you had more time?
 
+I believe, I covered most of them that I could think off.
 
+
+## Refactored app.py to integrate display logic with Scheduler:
+
+Multi-pet support: the original app only managed one pet, so Scheduler.detect_conflicts could never fire — conflicts within a single plan are already resolved by _resolve_conflicts before display. Extended the app to manage a household of pets (mirroring main.py's reuse-one-Owner pattern), each with its own tasks and start time.
+Conflict detection surfaced: after generating each pet's plan, Scheduler.detect_conflicts([...]) runs across all of them. st.success shows when the household is clear; each conflict gets its own st.warning (most visible option — one boxed alert per overlap, shown immediately after generation, before the per-pet detail tables) so an owner sees exactly which two care times collide and for which pets.
+Sorting/filtering leveraged, not duplicated: plan display now reads directly from plan.to_table() / plan.entries instead of hand-rolled st.write loops, so ordering and time-budget filtering come from Scheduler itself.
+Other integration gap found & fixed: tasks dropped by the time-budget filter were previously silently discarded with no UI feedback. Added an st.warning per pet listing tasks that didn't fit today's budget.
+Extra clarity: added a display-only "mandatory" column (derived from MANDATORY_CATEGORIES) so owners can see which tasks are guaranteed to be scheduled regardless of budget.
+Used st.table for task lists and plan schedules, st.success/st.warning for status, per the ask.
 
 ---
 
@@ -256,10 +277,16 @@ My confidence level is 8 out of 10.
 
 - What part of this project are you most satisfied with?
 
+I am most satisfied with the backend (UML diagram) and Logic implementation with architecture.
+
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
 
+I would imrove the UI and UX.
+
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+During this project the one important thing that I learned is, after designing the system, integrating it with UI and make them talk to each other is an important stage in apps successful implementation.

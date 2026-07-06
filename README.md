@@ -22,6 +22,44 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## ✨ Features
+
+**Task management**
+- **Task creation** — Add a task with a title, duration, priority (LOW/MEDIUM/HIGH), and category (walk, feeding, medication, grooming, enrichment, other).
+- **Task removal** — Remove any task from an owner's list by picking it from a numbered list.
+- **Stable task identity** — Every task gets a unique ID so removing or tracking one task never gets confused with a similar-looking one.
+- **Mandatory categories** — Feeding and medication tasks are never dropped by the time-budget filter, no matter how little time remains.
+
+**Scheduling engine**
+- **Sorting by priority** — Tasks are sorted HIGH → MEDIUM → LOW before being slotted into the day.
+- **Filtering by time budget** — Tasks that don't fit the owner's available minutes are dropped; mandatory tasks are force-scheduled regardless.
+- **Sequential slotting** — Tasks that make the cut are placed back-to-back starting from a chosen start time.
+- **Conflict resolution** — If slotting produces overlapping times within one pet's plan, later entries are shifted forward so nothing overlaps.
+- **Explained scheduling** — Every scheduled entry includes a plain-language reason it was placed where it was (priority, category, and remaining budget).
+
+**Conflict detection**
+- **Cross-pet conflict warnings** — Compares every pet's plan against every other pet's plan and flags any care times that overlap across the household.
+
+**Recurring tasks**
+- **Daily/weekly recurrence** — A completed recurring task automatically spawns its next occurrence, due 1 day (daily) or 7 days (weekly) later.
+- **Automatic carry-forward** — Completed recurring tasks are replaced by their next occurrence, and completed one-off tasks are cleared, each time a new plan is generated.
+
+**Multi-pet households**
+- **Per-pet plans, one owner** — A single owner can generate an independent plan for each of several pets, modeling a full household of pets.
+- **Household-wide filtering** — Tasks can be filtered by completion status and/or by pet across the whole household.
+
+**Streamlit UI**
+- **Owner & household setup** — Enter owner name, available minutes per pet, and preferences.
+- **Multi-pet management** — Add any number of pets, each with its own species/breed/age, task list, and start time.
+- **Live task tables** — Every pet's tasks render in a table as soon as they're added.
+- **One-click household schedule** — Generate a plan for every pet at once from a single button.
+- **Visual conflict alerts** — A success banner when the household's schedule is conflict-free, a warning per overlapping pair when it isn't.
+- **Budget-drop warnings** — A warning lists any tasks that didn't fit today's time budget, pet by pet.
+- **Mandatory-task flagging** — Each scheduled entry shows whether it's a mandatory (feeding/medication) task.
+
+**Testing**
+- **47 automated tests** — Covering sorting, filtering, time-budget edge cases, recurrence, and conflict detection.
+
 ## Getting started
 
 ### Setup
@@ -179,12 +217,61 @@ tests\test_pawpal.py ..                                                         
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### 1. Main UI features and user actions
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+| Section | What it's for | User actions |
+|---|---|---|
+| **Owner** | Household-level settings | Enter owner name, available minutes per pet, and preferences |
+| **Pets & Tasks** | Manage the household | Add a new pet (name, species, breed, age); pick a pet from "Manage tasks for" to set its start time and add/view its tasks (title, duration, priority, category) |
+| **Generate Household Schedule** | Build and review the plan | Pick a shared plan date, then click "Generate schedule" to build every pet's plan at once |
+
+### 2. Exemplary workflow
+
+1. **Add a pet** — Fill in the "Add a pet" form (e.g. Mochi, dog, Shiba Inu, 3 years) and click "Add pet."
+2. **Add tasks** — With Mochi selected, add "Morning walk" (30 min, HIGH, walk) and "Feeding" (10 min, HIGH, feeding).
+3. **Add a second pet** — Add Luna (cat) and give her a "Feeding" task (10 min, HIGH, feeding) starting at the same time as Mochi's walk, on purpose.
+4. **Generate the schedule** — Set a plan date and click "Generate schedule."
+5. **View today's schedule** — Each pet's plan appears as a table with start/end times, priority, and the reason each task was placed there; a warning banner flags that Mochi's walk overlaps Luna's feeding.
+
+### 3. Key scheduler behaviors
+
+- **Sorting by priority** — Within each pet's plan, HIGH-priority tasks are slotted before MEDIUM and LOW ones.
+- **Mandatory tasks always scheduled** — Feeding and medication tasks are force-scheduled even when the time budget is nearly exhausted.
+- **Conflict warnings** — Overlapping care times across pets produce one warning per overlapping pair, naming both tasks, both pets, and both time ranges.
+- **Budget-drop warnings** — Any non-mandatory task that doesn't fit the available time is called out by name instead of silently disappearing.
+- **Daily recurrence** — Marking a recurring task complete spawns its next occurrence automatically, due one day (daily) or seven days (weekly) later.
+
+### 4. Sample CLI output
+
+Generated by `python main.py`, a two-pet household demo that intentionally starts both pets' plans at 07:30 to demonstrate conflict detection:
+
+```
+==========================================
+           Today's Schedule
+==========================================
+Owner: Jordan Alvarez
+Date:  2026-07-05
+
+-- Mochi (dog, Shiba Inu) --
+  07:30-08:00  Morning walk (30 min) [priority: high]
+      reason: scheduled at 07:30 because it is high priority (walk) and fits within the remaining time budget
+  08:00-08:10  Feeding (10 min) [priority: high]
+      reason: scheduled at 08:00 because it is high priority (feeding) and fits within the remaining time budget
+  08:10-08:25  Puzzle toy (15 min) [priority: medium]
+      reason: scheduled at 08:10 because it is medium priority (enrichment) and fits within the remaining time budget
+Total planned time: 55 minutes
+
+-- Luna (cat, Domestic Shorthair) --
+  07:30-07:40  Feeding (10 min) [priority: high]
+      reason: scheduled at 07:30 because it is high priority (feeding) and fits within the remaining time budget
+  07:40-07:55  Litter box cleaning (15 min) [priority: medium]
+      reason: scheduled at 07:40 because it is medium priority (other) and fits within the remaining time budget
+Total planned time: 25 minutes
+==========================================
+
+== Conflict detection ==
+  Warning: 'Morning walk' for Mochi (07:30-08:00) overlaps with 'Feeding' for Luna (07:30-07:40)
+  Warning: 'Morning walk' for Mochi (07:30-08:00) overlaps with 'Litter box cleaning' for Luna (07:40-07:55)
+```
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
