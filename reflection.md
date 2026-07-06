@@ -189,6 +189,45 @@ The tradeoff is reasonable because of apps simplicity in otherwords smaller data
 
 **a. What you tested**
 
+Most important edge cases for a pet scheduler with sorting + recurring tasks
+Happy paths (locked in by existing + new tests):
+
+1. A single pet's tasks fit within the time budget and get scheduled sequentially in        priority order.
+2. Multiple pets' plans don't overlap in time — no conflicts reported.
+3. A recurring task completes and cleanly spawns its next occurrence.
+
+Edge cases (the gaps that were found and closed with 15 new tests in test_pawpal_system.py):
+
+1. Category: Time conflicts	
+   Edge case: Two tasks at the exact same start time (your example) — both within one plan and across two pets
+   Why it matters: All existing conflict tests only used partial overlaps; identical start times are a distinct code path worth locking down separately.
+
+2. Category: Time conflicts	
+   Edge case: Back-to-back tasks that just touch (one ends exactly when the next starts)
+   Why it matters: The overlap check uses strict <, so touching isn't a conflict — this needed an explicit test to document it's intentional, not an oversight.
+
+3. Category: Time budget
+   Edge case: Zero (or otherwise insufficient) available minutes.
+   Why it matters: Mandatory categories (feeding, medication) are still force-scheduled even at 0 minutes; nothing tested this literal boundary before.
+
+4. Category: Sorting
+   Edge case: Same-priority ties beyond a single HIGH/HIGH case; ties not broken by duration.
+   Why it matters: The sort has no secondary key — MEDIUM/MEDIUM and LOW/LOW ties, and same-priority tasks of different lengths, weren't verified to preserve insertion order.
+
+5. Category: Recurring tasks
+   Edge case: Mixed-case frequency strings ("Daily", "WEEKLY"); multiple recurring tasks completing in the same call; a recurring mandatory task surviving carry-forward under a tight budget.
+   Why it matters: These are realistic user inputs/scenarios the recurrence engine hadn't been exercised against.
+
+6. Category: Pet with no tasks
+   Edge case: Empty list passed directly to the sort/filter building blocks, not just end-to-end.
+   Why it matters: Pins the "no tasks" behavior at the unit level, not just via generate_plan().
+
+7. Category: Known bug found along the way
+   Edge case: detect_conflicts never compares plan.date — two plans on different days with the same clock-time entries get falsely flagged as conflicting.
+   Why it matters: I added a test that documents this as current behavior with a comment flagging it as a known limitation, rather than silently fixing the production logic.
+
+All 45 tests pass (15 new + 30 existing).
+
 - What behaviors did you test?
 
 1. Scheduling Tasks
@@ -197,12 +236,17 @@ The tradeoff is reasonable because of apps simplicity in otherwords smaller data
 
 - Why were these tests important?
 
-The above 
+The above test verifications are important because they will make sure the app will run as intended without breaking dead. Verifying these tests also leads into correct implementation of the logic layer and the algorithms used.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
+
+My confidence level is 8 out of 10.
+
 - What edge cases would you test next if you had more time?
+
+
 
 ---
 
