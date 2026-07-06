@@ -190,7 +190,14 @@ The tradeoff is reasonable because of apps simplicity in otherwords smaller data
 **a. What you tested**
 
 - What behaviors did you test?
+
+1. Scheduling Tasks
+2. Managing task priorities
+3. Owner and Pet relations
+
 - Why were these tests important?
+
+The above 
 
 **b. Confidence**
 

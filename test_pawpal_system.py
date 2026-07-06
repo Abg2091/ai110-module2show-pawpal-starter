@@ -75,6 +75,16 @@ def test_owner_remove_task_only_removes_the_matching_identity(owner):
     assert owner.get_tasks() == [b]
 
 
+def test_owner_remove_task_with_unknown_id_is_a_silent_no_op(owner):
+    kept = Task("Walk", 10, Priority.LOW, TaskCategory.WALK)
+    unrelated = Task("Feed Mochi", 10, Priority.HIGH, TaskCategory.FEEDING)
+    owner.add_task(kept)
+
+    owner.remove_task(unrelated)
+
+    assert owner.get_tasks() == [kept]
+
+
 def test_owner_owns_its_pet(owner, pet):
     assert owner.pet is pet
 
@@ -97,6 +107,33 @@ def test_sort_by_priority_orders_high_first_and_is_stable(owner):
     ordered = scheduler._sort_by_priority([low, high1, medium, high2])
 
     assert ordered == [high1, high2, medium, low]
+
+
+def test_sort_by_priority_is_stable_for_medium_and_low_ties(owner):
+    medium1 = Task("Play", 10, Priority.MEDIUM, TaskCategory.ENRICHMENT)
+    low1 = Task("Brush", 10, Priority.LOW, TaskCategory.GROOMING)
+    medium2 = Task("Puzzle", 10, Priority.MEDIUM, TaskCategory.ENRICHMENT)
+    low2 = Task("Vacuum", 10, Priority.LOW, TaskCategory.OTHER)
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+
+    ordered = scheduler._sort_by_priority([low1, medium1, low2, medium2])
+
+    assert ordered == [medium1, medium2, low1, low2]
+
+
+def test_sort_by_priority_does_not_tie_break_by_duration(owner):
+    long_task = Task("Long walk", 60, Priority.HIGH, TaskCategory.WALK)
+    short_task = Task("Quick feed", 5, Priority.HIGH, TaskCategory.FEEDING)
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+
+    ordered = scheduler._sort_by_priority([long_task, short_task])
+
+    assert ordered == [long_task, short_task]
+
+
+def test_sort_by_priority_handles_empty_task_list(owner):
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    assert scheduler._sort_by_priority([]) == []
 
 
 def test_filter_by_time_skips_tasks_that_do_not_fit_but_keeps_checking(owner):
@@ -130,6 +167,31 @@ def test_filter_by_time_mandatory_overflow_blocks_later_optional_tasks(owner):
     assert fitted == [oversized_meds]
 
 
+def test_filter_by_time_with_zero_budget_still_includes_mandatory_tasks(owner):
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    meds = Task("Meds", 10, Priority.HIGH, TaskCategory.MEDICATION)
+    optional = Task("Play", 10, Priority.HIGH, TaskCategory.ENRICHMENT)
+
+    fitted = scheduler._filter_by_time([meds, optional], budget=0)
+
+    assert fitted == [meds]
+
+
+def test_filter_by_time_with_zero_budget_and_no_mandatory_tasks_returns_empty(owner):
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    walk = Task("Walk", 10, Priority.HIGH, TaskCategory.WALK)
+    play = Task("Play", 5, Priority.MEDIUM, TaskCategory.ENRICHMENT)
+
+    fitted = scheduler._filter_by_time([walk, play], budget=0)
+
+    assert fitted == []
+
+
+def test_filter_by_time_handles_empty_task_list(owner):
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    assert scheduler._filter_by_time([], budget=60) == []
+
+
 def test_generate_plan_builds_sequential_schedule_and_drops_what_does_not_fit(owner):
     owner.available_minutes = 60
     owner.add_task(Task("Walk", 30, Priority.HIGH, TaskCategory.WALK))
@@ -153,6 +215,17 @@ def test_generate_plan_reads_tasks_live_from_owner(owner):
     owner.add_task(Task("Walk", 10, Priority.HIGH, TaskCategory.WALK))
 
     assert len(scheduler.generate_plan().entries) == 1
+
+
+def test_generate_plan_with_zero_available_minutes_still_schedules_mandatory_task(owner):
+    owner.available_minutes = 0
+    owner.add_task(Task("Feed", 10, Priority.HIGH, TaskCategory.FEEDING))
+    owner.add_task(Task("Brush", 10, Priority.LOW, TaskCategory.GROOMING))
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+
+    plan = scheduler.generate_plan()
+
+    assert [entry.task.title for entry in plan.entries] == ["Feed"]
 
 
 def test_next_occurrence_daily_adds_one_day():
@@ -181,6 +254,14 @@ def test_next_occurrence_returns_none_for_non_recurring():
 def test_next_occurrence_returns_none_for_unrecognized_frequency():
     task = Task("Walk", 20, Priority.HIGH, TaskCategory.WALK, is_recurring=True, frequency="fortnightly")
     assert task.next_occurrence("2026-07-04") is None
+
+
+def test_next_occurrence_frequency_is_case_insensitive():
+    daily = Task("Meds", 5, Priority.HIGH, TaskCategory.MEDICATION, is_recurring=True, frequency="Daily")
+    weekly = Task("Vacuum", 20, Priority.LOW, TaskCategory.OTHER, is_recurring=True, frequency="WEEKLY")
+
+    assert daily.next_occurrence("2026-07-04").last_scheduled_date == "2026-07-05"
+    assert weekly.next_occurrence("2026-07-04").last_scheduled_date == "2026-07-11"
 
 
 def test_generate_plan_spawns_next_occurrence_for_completed_daily_task(owner):
@@ -232,6 +313,40 @@ def test_generate_plan_keeps_pending_one_off_tasks(owner):
     assert vet_visit in owner.get_tasks()
 
 
+def test_generate_plan_carries_forward_multiple_completed_recurring_tasks_independently(owner):
+    meds = Task("Meds", 5, Priority.HIGH, TaskCategory.MEDICATION, is_recurring=True, frequency="daily")
+    vacuum = Task("Vacuum", 20, Priority.LOW, TaskCategory.OTHER, is_recurring=True, frequency="weekly")
+    owner.add_task(meds)
+    owner.add_task(vacuum)
+    meds.mark_complete()
+    vacuum.mark_complete()
+
+    Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04").generate_plan()
+
+    remaining = owner.get_tasks()
+    assert meds not in remaining
+    assert vacuum not in remaining
+    assert len(remaining) == 2
+    next_meds = next(t for t in remaining if t.title == "Meds")
+    next_vacuum = next(t for t in remaining if t.title == "Vacuum")
+    assert next_meds.last_scheduled_date == "2026-07-05"
+    assert next_vacuum.last_scheduled_date == "2026-07-11"
+
+
+def test_generate_plan_recurring_mandatory_task_stays_mandatory_after_carry_forward(owner):
+    owner.available_minutes = 15
+    feeding = Task("Feed", 10, Priority.HIGH, TaskCategory.FEEDING, is_recurring=True, frequency="daily")
+    owner.add_task(feeding)
+    feeding.mark_complete()
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    scheduler.generate_plan()
+
+    owner.add_task(Task("Long groom", 30, Priority.HIGH, TaskCategory.GROOMING))
+    plan = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-05").generate_plan()
+
+    assert [entry.task.title for entry in plan.entries] == ["Feed"]
+
+
 def test_resolve_conflicts_shifts_overlapping_entries_and_preserves_duration(owner):
     scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
     task_a = Task("A", 30, Priority.HIGH, TaskCategory.WALK)
@@ -239,6 +354,21 @@ def test_resolve_conflicts_shifts_overlapping_entries_and_preserves_duration(own
     entries = [
         ScheduledEntry(task_a, "08:00", "08:30", "reason a"),
         ScheduledEntry(task_b, "08:15", "08:35", "reason b"),  # overlaps with A
+    ]
+
+    resolved = scheduler._resolve_conflicts(entries)
+
+    assert (resolved[0].start_time, resolved[0].end_time) == ("08:00", "08:30")
+    assert (resolved[1].start_time, resolved[1].end_time) == ("08:30", "08:50")
+
+
+def test_resolve_conflicts_shifts_entry_starting_at_same_time_as_previous(owner):
+    scheduler = Scheduler(owner=owner, start_time="08:00", plan_date="2026-07-04")
+    task_a = Task("A", 30, Priority.HIGH, TaskCategory.WALK)
+    task_b = Task("B", 20, Priority.HIGH, TaskCategory.FEEDING)
+    entries = [
+        ScheduledEntry(task_a, "08:00", "08:30", "reason a"),
+        ScheduledEntry(task_b, "08:00", "08:20", "reason b"),  # same start time as A
     ]
 
     resolved = scheduler._resolve_conflicts(entries)
@@ -262,6 +392,21 @@ def test_detect_conflicts_flags_overlapping_entries_across_pets():
     assert "Luna" in conflicts[0]
 
 
+def test_detect_conflicts_flags_two_pets_starting_at_the_exact_same_time():
+    mochi = Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
+    luna = Pet(name="Luna", species="cat", breed="Domestic Shorthair", age_years=2)
+    mochi_plan = DailyPlan(pet=mochi, date="2026-07-04")
+    mochi_plan.add_entry(ScheduledEntry(Task("Walk", 30, Priority.HIGH, TaskCategory.WALK), "07:30", "08:00", "r"))
+    luna_plan = DailyPlan(pet=luna, date="2026-07-04")
+    luna_plan.add_entry(ScheduledEntry(Task("Vet checkup", 30, Priority.HIGH, TaskCategory.OTHER), "07:30", "08:00", "r"))
+
+    conflicts = Scheduler.detect_conflicts([mochi_plan, luna_plan])
+
+    assert len(conflicts) == 1
+    assert "Mochi" in conflicts[0]
+    assert "Luna" in conflicts[0]
+
+
 def test_detect_conflicts_returns_empty_list_when_no_overlap():
     mochi = Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
     luna = Pet(name="Luna", species="cat", breed="Domestic Shorthair", age_years=2)
@@ -271,6 +416,34 @@ def test_detect_conflicts_returns_empty_list_when_no_overlap():
     luna_plan.add_entry(ScheduledEntry(Task("Feed", 10, Priority.HIGH, TaskCategory.FEEDING), "09:00", "09:10", "r"))
 
     assert Scheduler.detect_conflicts([mochi_plan, luna_plan]) == []
+
+
+def test_detect_conflicts_does_not_flag_back_to_back_touching_entries():
+    mochi = Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
+    luna = Pet(name="Luna", species="cat", breed="Domestic Shorthair", age_years=2)
+    mochi_plan = DailyPlan(pet=mochi, date="2026-07-04")
+    mochi_plan.add_entry(ScheduledEntry(Task("Walk", 30, Priority.HIGH, TaskCategory.WALK), "07:30", "08:00", "r"))
+    luna_plan = DailyPlan(pet=luna, date="2026-07-04")
+    luna_plan.add_entry(ScheduledEntry(Task("Feed", 10, Priority.HIGH, TaskCategory.FEEDING), "08:00", "08:10", "r"))
+
+    assert Scheduler.detect_conflicts([mochi_plan, luna_plan]) == []
+
+
+def test_detect_conflicts_currently_ignores_plan_date_across_plans():
+    """Known limitation: detect_conflicts never compares plan.date, so plans on
+    different days but with overlapping clock times are still flagged. This
+    test locks in that actual current behavior rather than silently fixing it;
+    see reflection.md's "what edge cases would you test next" question."""
+    mochi = Pet(name="Mochi", species="dog", breed="Shiba Inu", age_years=3)
+    luna = Pet(name="Luna", species="cat", breed="Domestic Shorthair", age_years=2)
+    mochi_plan = DailyPlan(pet=mochi, date="2026-07-04")
+    mochi_plan.add_entry(ScheduledEntry(Task("Walk", 30, Priority.HIGH, TaskCategory.WALK), "07:30", "08:00", "r"))
+    luna_plan = DailyPlan(pet=luna, date="2026-07-11")  # a different day entirely
+    luna_plan.add_entry(ScheduledEntry(Task("Feed", 10, Priority.HIGH, TaskCategory.FEEDING), "07:30", "07:40", "r"))
+
+    conflicts = Scheduler.detect_conflicts([mochi_plan, luna_plan])
+
+    assert len(conflicts) == 1
 
 
 # ── DailyPlan / ScheduledEntry ────────────────────────────────────────────
